@@ -9,8 +9,6 @@ export const courseNapoli2026 = {
   courseStart: new Date("2026-11-06T14:00:00+01:00"),
   /** Primo giorno del cammino illustrato (si illumina di un passo al giorno fino al corso). */
   journeyStart: new Date("2026-10-24T00:00:00+02:00"),
-  secretariatEmail: "corsoterritorionapoli@gmail.com",
-  mailtoSubject: "Segreteria — Corso Territorio Napoli 2026",
 };
 
 const ROME_TZ = "Europe/Rome";

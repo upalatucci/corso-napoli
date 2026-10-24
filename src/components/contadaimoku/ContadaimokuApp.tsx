@@ -88,8 +88,6 @@ export function ContadaimokuApp() {
     return Math.max(0, timer.completesAt - now);
   }, [timer, now]);
 
-  const mailtoHref = `mailto:${courseNapoli2026.secretariatEmail}?subject=${encodeURIComponent(courseNapoli2026.mailtoSubject)}`;
-
   async function cancelTimer() {
     if (!timer?.confirmed) {
       setTimer(null);
@@ -273,17 +271,6 @@ export function ContadaimokuApp() {
         </article>
 
         <article className="wave-panel wave-panel--duo">
-          <p className="wave-eyebrow">Segreteria corso</p>
-          <h2 className="wave-title">Hai bisogno di informazioni?</h2>
-          <p className="mt-2 text-sm leading-relaxed wave-muted">
-            Per domande su iscrizioni, logistica e programma, scrivi alla segreteria del corso.
-          </p>
-          <a className="wave-contact" href={mailtoHref}>
-            {courseNapoli2026.secretariatEmail}
-          </a>
-        </article>
-
-        <article className="wave-panel wave-panel--duo">
           <p className="wave-eyebrow">Il primo passo</p>
           <h2 className="wave-title">Comincia dal Daimoku</h2>
           <p className="mt-2 text-sm leading-relaxed wave-muted">
@@ -443,9 +430,6 @@ export function ContadaimokuApp() {
         </div>
         <p>{courseNapoli2026.venue} · Salerno</p>
         <p className="mt-2">Ogni persona è preziosa. Ogni passo conta.</p>
-        <p className="mt-2">
-          <a className="wave-contact" href={mailtoHref}>Segreteria</a>
-        </p>
       </footer>
 
       {showPrivacy && (
