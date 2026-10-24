@@ -35,10 +35,9 @@ export function ContadaimokuApp() {
   const [timer, setTimer] = useState<TimerState | null>(null);
   const [now, setNow] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [registering, setRegistering] = useState(false);
   const [status, setStatus] = useState("");
   const [showPrivacy, setShowPrivacy] = useState(false);
-  const [showManualModal, setShowManualModal] = useState(false);
-  const [manualMinutes, setManualMinutes] = useState(10);
 
   const applySnapshot = useCallback((p: Progress, d: DayEntry[]) => {
     setProgress(p);
@@ -211,14 +210,11 @@ export function ContadaimokuApp() {
     }
   }
 
-  function openManualModal() {
-    setManualMinutes(Math.max(1, Math.min(720, Math.round(minutesChoice))));
-    setShowManualModal(true);
-  }
-
   async function registerManual() {
-    const minutes = Math.max(1, Math.min(720, Math.round(manualMinutes)));
+    const minutes = Math.max(1, Math.min(720, Math.round(minutesChoice)));
+    setRegistering(true);
     setBusy(true);
+    setStatus("");
     try {
       const id = crypto.randomUUID();
       const secret = randomSecret();
@@ -239,12 +235,12 @@ export function ContadaimokuApp() {
       const json = await response.json();
       if (!response.ok || !json.progress) throw new Error(json.error ?? "Minuti non registrati");
       applySnapshot(json.progress, json.days);
-      setShowManualModal(false);
       setStatus(`${formatCount(minutes)} minuti registrati · ${formatDaimoku(minutes)} aggiunti.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Minuti non registrati");
     } finally {
       setBusy(false);
+      setRegistering(false);
     }
   }
 
@@ -351,10 +347,16 @@ export function ContadaimokuApp() {
                   className="wave-btn wave-btn--primary"
                   aria-busy={busy}
                 >
-                  {busy ? "Avvio in corso…" : "Avvia il timer"}
+                  {busy && !registering ? "Avvio in corso…" : "Avvia il timer"}
                 </button>
-                <button type="button" disabled={busy} onClick={openManualModal} className="wave-btn wave-btn--secondary">
-                  Registra minuti già svolti
+                <button
+                  type="button"
+                  disabled={busy || minutesChoice < 1}
+                  onClick={() => void registerManual()}
+                  className="wave-btn wave-btn--secondary"
+                  aria-busy={busy}
+                >
+                  {registering ? "Registrazione…" : "Registra minuti già svolti"}
                 </button>
               </div>
             </>
@@ -445,57 +447,6 @@ export function ContadaimokuApp() {
           <a className="wave-contact" href={mailtoHref}>Segreteria</a>
         </p>
       </footer>
-
-      {showManualModal && (
-        <div
-          className="wave-modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="manual-modal-title"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !busy) setShowManualModal(false);
-          }}
-        >
-          <div className="wave-panel wave-modal">
-            <h2 id="manual-modal-title" className="wave-title">Registra minuti già svolti</h2>
-            <p className="mt-2 text-sm wave-muted">
-              Indica quanti minuti di Daimoku hai già recitato: verranno aggiunti subito al totale collettivo.
-            </p>
-            <label className="mt-4 block text-sm font-semibold">
-              Minuti effettivi
-              <input
-                type="number"
-                min={1}
-                max={720}
-                className="wave-input"
-                value={manualMinutes}
-                onChange={(e) => setManualMinutes(Number(e.target.value) || 0)}
-              />
-            </label>
-            <p className="mt-3 font-semibold">
-              ≈ {formatDaimoku(Math.max(0, Math.round(manualMinutes)))}
-            </p>
-            <div className="mt-6 flex flex-col gap-3">
-              <button
-                type="button"
-                disabled={busy || manualMinutes < 1}
-                onClick={() => void registerManual()}
-                className="wave-btn wave-btn--primary w-full"
-              >
-                Aggiungi al totale
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => setShowManualModal(false)}
-                className="wave-btn wave-btn--secondary w-full"
-              >
-                Annulla
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showPrivacy && (
         <div className="wave-modal-backdrop" role="dialog" aria-modal="true">
