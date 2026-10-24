@@ -14,6 +14,7 @@ const source = Source_Sans_3({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://corso-napoli.vercel.app"),
   title: "Contadaimoku & Shakubuku · Josho Napoli",
   description:
     "Percorso collettivo anonimo verso il Corso Territorio Napoli · 6-8 novembre 2026. Daimoku, Shakubuku e inviti.",
