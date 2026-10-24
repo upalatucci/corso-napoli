@@ -4,14 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   fetchProgress,
   loadCachedProgress,
-  loadLastCorrection,
   progressHeaders,
   randomSecret,
   requestProof,
   saveCachedProgress,
-  saveLastCorrection,
   sha256Hex,
-  type LastCorrection,
 } from "@/lib/contadaimoku/client";
 import { formatCount, formatDaimoku, formatTimer } from "@/lib/contadaimoku/format";
 import type { DayEntry, Progress } from "@/lib/contadaimoku/types";
@@ -43,9 +40,9 @@ export function ContadaimokuApp() {
   const [now, setNow] = useState(0);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
-  const [correction, setCorrection] = useState<LastCorrection | null>(null);
-  const [correctionMinutes, setCorrectionMinutes] = useState(0);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showManualModal, setShowManualModal] = useState(false);
+  const [manualMinutes, setManualMinutes] = useState(10);
 
   const applySnapshot = useCallback((p: Progress, d: DayEntry[]) => {
     setProgress(p);
@@ -55,9 +52,6 @@ export function ContadaimokuApp() {
   useEffect(() => {
     const cached = loadCachedProgress();
     if (cached) setProgress(cached.progress);
-    const stored = loadLastCorrection();
-    setCorrection(stored);
-    if (stored?.kind === "minutes") setCorrectionMinutes(stored.amount);
     fetchProgress()
       .then(({ progress: p, days: d }) => applySnapshot(p, d))
       .catch(() => setStatus("Impossibile aggiornare i dati. Riprova più tardi."));
@@ -150,7 +144,7 @@ export function ContadaimokuApp() {
         startedAt: json.timer.startedAt * 1000,
         completesAt: json.timer.endsAt * 1000,
       });
-      setStatus("Timer avviato. Puoi bloccare lo schermo: il tempo è calcolato dagli orari.");
+      setStatus("Timer avviato. Blocca pure lo schermo.");
     } catch (error) {
       setTimer(null);
       setStatus(error instanceof Error ? error.message : "Avvio non confermato");
@@ -184,15 +178,6 @@ export function ContadaimokuApp() {
       const json = await response.json();
       if (!response.ok || !json.progress) throw new Error(json.error ?? "Completamento non registrato");
       applySnapshot(json.progress, json.days);
-      saveLastCorrection({
-        eventId: json.timer.id,
-        kind: "minutes",
-        amount: json.timer.countedMinutes,
-        secret: timer.secret,
-        expiresAt: json.timer.correctionUntil * 1000,
-      });
-      setCorrectionMinutes(json.timer.countedMinutes);
-      setCorrection(loadLastCorrection());
       setTimer(null);
       setStatus(
         `${formatCount(json.timer.countedMinutes)} minuti completati · ${formatDaimoku(json.timer.countedMinutes)} aggiunti al totale.`,
@@ -204,8 +189,13 @@ export function ContadaimokuApp() {
     }
   }
 
+  function openManualModal() {
+    setManualMinutes(Math.max(1, Math.min(720, Math.round(minutesChoice))));
+    setShowManualModal(true);
+  }
+
   async function registerManual() {
-    const minutes = Math.max(1, Math.min(720, Math.round(minutesChoice)));
+    const minutes = Math.max(1, Math.min(720, Math.round(manualMinutes)));
     setBusy(true);
     try {
       const id = crypto.randomUUID();
@@ -227,45 +217,10 @@ export function ContadaimokuApp() {
       const json = await response.json();
       if (!response.ok || !json.progress) throw new Error(json.error ?? "Minuti non registrati");
       applySnapshot(json.progress, json.days);
-      saveLastCorrection({
-        eventId: json.timer.id,
-        kind: "minutes",
-        amount: minutes,
-        secret,
-        expiresAt: json.timer.correctionUntil * 1000,
-      });
-      setCorrectionMinutes(minutes);
-      setCorrection(loadLastCorrection());
+      setShowManualModal(false);
       setStatus(`${formatCount(minutes)} minuti registrati · ${formatDaimoku(minutes)} aggiunti.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "Minuti non registrati");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function undoLast() {
-    if (!correction || correction.kind !== "minutes") return;
-    setBusy(true);
-    try {
-      const response = await fetch("/api/progress", {
-        method: "PATCH",
-        headers: progressHeaders(),
-        body: JSON.stringify({
-          action: "timer:correct",
-          sessionId: correction.eventId,
-          secret: correction.secret,
-          minutes: correctionMinutes,
-        }),
-      });
-      const json = await response.json();
-      if (!response.ok || !json.progress) throw new Error(json.error ?? "Correzione non riuscita");
-      applySnapshot(json.progress, json.days);
-      saveLastCorrection(null);
-      setCorrection(null);
-      setStatus("Contributo aggiornato.");
-    } catch (error) {
-      setStatus(error instanceof Error ? error.message : "Correzione non riuscita");
     } finally {
       setBusy(false);
     }
@@ -371,7 +326,7 @@ export function ContadaimokuApp() {
                 <button type="button" disabled={busy} onClick={() => void startTimer()} className="wave-btn wave-btn--primary">
                   Avvia il timer
                 </button>
-                <button type="button" disabled={busy} onClick={() => void registerManual()} className="wave-btn wave-btn--secondary">
+                <button type="button" disabled={busy} onClick={openManualModal} className="wave-btn wave-btn--secondary">
                   Registra minuti già svolti
                 </button>
               </div>
@@ -429,26 +384,6 @@ export function ContadaimokuApp() {
             </p>
           )}
         </article>
-
-        {correction?.kind === "minutes" && (
-          <article className="wave-panel">
-            <h3 className="font-extrabold text-lg">Ultimo contributo · modificabile</h3>
-            <label className="mt-3 block text-sm font-semibold">
-              Minuti effettivi
-              <input
-                type="number"
-                min={0}
-                max={correction.amount}
-                value={correctionMinutes}
-                onChange={(e) => setCorrectionMinutes(Number(e.target.value) || 0)}
-                className="wave-input"
-              />
-            </label>
-            <button type="button" disabled={busy} onClick={() => void undoLast()} className="wave-btn wave-btn--secondary mt-4 w-full">
-              Salva correzione
-            </button>
-          </article>
-        )}
       </main>
 
       <footer className="wave-footer">
@@ -467,13 +402,64 @@ export function ContadaimokuApp() {
         </p>
       </footer>
 
+      {showManualModal && (
+        <div
+          className="wave-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="manual-modal-title"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !busy) setShowManualModal(false);
+          }}
+        >
+          <div className="wave-panel wave-modal">
+            <h2 id="manual-modal-title" className="wave-title">Registra minuti già svolti</h2>
+            <p className="mt-2 text-sm wave-muted">
+              Indica quanti minuti di Daimoku hai già recitato: verranno aggiunti subito al totale collettivo.
+            </p>
+            <label className="mt-4 block text-sm font-semibold">
+              Minuti effettivi
+              <input
+                type="number"
+                min={1}
+                max={720}
+                className="wave-input"
+                value={manualMinutes}
+                onChange={(e) => setManualMinutes(Number(e.target.value) || 0)}
+              />
+            </label>
+            <p className="mt-3 font-semibold">
+              ≈ {formatDaimoku(Math.max(0, Math.round(manualMinutes)))}
+            </p>
+            <div className="mt-6 flex flex-col gap-3">
+              <button
+                type="button"
+                disabled={busy || manualMinutes < 1}
+                onClick={() => void registerManual()}
+                className="wave-btn wave-btn--primary w-full"
+              >
+                Aggiungi al totale
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setShowManualModal(false)}
+                className="wave-btn wave-btn--secondary w-full"
+              >
+                Annulla
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showPrivacy && (
         <div className="wave-modal-backdrop" role="dialog" aria-modal="true">
           <div className="wave-panel wave-modal">
             <h2 className="wave-title">Privacy e funzionamento</h2>
             <p className="mt-3 text-sm wave-muted">
-              Il contatore è anonimo: non raccogliamo nomi né classifiche. Ogni dispositivo può correggere l’ultimo
-              contributo Daimoku entro 48 ore.
+              Il contatore è anonimo: non raccogliamo nomi né classifiche. Ogni contributo Daimoku si somma al totale
+              collettivo in modo permanente.
             </p>
             <button type="button" className="wave-btn wave-btn--primary mt-6 w-full" onClick={() => setShowPrivacy(false)}>
               Chiudi

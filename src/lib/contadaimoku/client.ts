@@ -1,20 +1,11 @@
 import type { DayEntry, Progress } from "./types";
 
 const STORAGE_PROGRESS = "contadaimoku-napoli-progress-v1";
-const STORAGE_CORRECTION = "contadaimoku-napoli-last-correction-v1";
 
 export type ProgressSnapshot = {
   progress: Progress;
   days: DayEntry[];
   savedAt: number;
-};
-
-export type LastCorrection = {
-  eventId: string;
-  kind: "minutes" | "shakubuku" | "super";
-  amount: number;
-  secret: string;
-  expiresAt: number;
 };
 
 function headers() {
@@ -107,21 +98,6 @@ export function loadCachedProgress(): ProgressSnapshot | null {
 
 export function saveCachedProgress(snapshot: ProgressSnapshot) {
   localStorage.setItem(STORAGE_PROGRESS, JSON.stringify(snapshot));
-}
-
-export function loadLastCorrection(): LastCorrection | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_CORRECTION);
-    if (!raw) return null;
-    return JSON.parse(raw) as LastCorrection;
-  } catch {
-    return null;
-  }
-}
-
-export function saveLastCorrection(value: LastCorrection | null) {
-  if (!value) localStorage.removeItem(STORAGE_CORRECTION);
-  else localStorage.setItem(STORAGE_CORRECTION, JSON.stringify(value));
 }
 
 export { headers as progressHeaders };

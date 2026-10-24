@@ -95,43 +95,6 @@ export async function applyPlus(
   return writeState(next);
 }
 
-export async function correctMinutes(state: StoredState, deltaMinutes: number, deltaSessions: number) {
-  const day = dayKeyRome();
-  const current = state.days.find((d) => d.day === day) ?? emptyDay(day);
-  const next: StoredState = {
-    progress: {
-      ...state.progress,
-      minutes: Math.max(0, state.progress.minutes + deltaMinutes),
-    },
-    days: upsertDay(state.days, {
-      day,
-      minutes: Math.max(0, current.minutes + deltaMinutes),
-      daimokuSessions: Math.max(0, current.daimokuSessions + deltaSessions),
-    }),
-  };
-  return writeState(next);
-}
-
-export async function undoPlus(
-  state: StoredState,
-  kind: "shakubuku" | "super",
-  amount: number,
-  day: string,
-) {
-  const current = state.days.find((d) => d.day === day) ?? emptyDay(day);
-  const next: StoredState = {
-    progress: {
-      ...state.progress,
-      [kind]: Math.max(0, state.progress[kind] - amount),
-    },
-    days: upsertDay(state.days, {
-      day,
-      [kind]: Math.max(0, current[kind] - amount),
-    }),
-  };
-  return writeState(next);
-}
-
 export function isValidProgress(value: unknown): value is Progress {
   if (!value || typeof value !== "object") return false;
   const p = value as Progress;

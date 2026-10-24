@@ -3,21 +3,15 @@ import { createProofChallenge, sha256Hex, verifyProof } from "@/lib/contadaimoku
 import {
   applyMinutes,
   applyPlus,
-  correctMinutes,
   getPlus,
   getTimer,
-  isValidDays,
-  isValidProgress,
   readState,
   savePlus,
   saveTimer,
-  undoPlus,
 } from "@/lib/contadaimoku/store";
 import { dayKeyRome } from "@/lib/contadaimoku/metrics";
 import { activeTimerCount, clearTimerActive, markTimerActive } from "@/lib/contadaimoku/presence";
 import type { PlusEvent, TimerSession } from "@/lib/contadaimoku/types";
-
-const CORRECTION_WINDOW_SEC = 48 * 60 * 60;
 
 function json(data: unknown, status = 200) {
   return NextResponse.json(data, { status });
@@ -115,7 +109,6 @@ export async function POST(request: NextRequest) {
     if (!verifyProof(proofToken, proofSolution)) {
       return json({ error: "Verifica anonima non valida" }, 403);
     }
-    const correctionUntil = Math.floor(Date.now() / 1000) + CORRECTION_WINDOW_SEC;
     const session: TimerSession = {
       id: sessionId,
       secretHash,
@@ -124,14 +117,13 @@ export async function POST(request: NextRequest) {
       endsAt: Math.floor(Date.now() / 1000),
       completed: true,
       countedMinutes: minutes,
-      correctionUntil,
     };
     await saveTimer(session);
     const updated = await applyMinutes(state, minutes);
     return json({
       progress: updated.progress,
       days: updated.days,
-      timer: { id: sessionId, countedMinutes: minutes, correctionUntil },
+      timer: { id: sessionId, countedMinutes: minutes },
     });
   }
 
@@ -151,17 +143,15 @@ export async function POST(request: NextRequest) {
     if (stopEarly && countedMinutes !== undefined) {
       minutes = Math.max(1, Math.min(session.minutes, Math.floor(countedMinutes)));
     }
-    const correctionUntil = Math.floor(Date.now() / 1000) + CORRECTION_WINDOW_SEC;
     session.completed = true;
     session.countedMinutes = minutes;
-    session.correctionUntil = correctionUntil;
     await saveTimer(session);
     await clearTimerActive(sessionId);
     const updated = await applyMinutes(state, minutes);
     return json({
       progress: updated.progress,
       days: updated.days,
-      timer: { id: sessionId, countedMinutes: minutes, correctionUntil },
+      timer: { id: sessionId, countedMinutes: minutes },
     });
   }
 
@@ -206,73 +196,12 @@ export async function POST(request: NextRequest) {
     };
     await savePlus(event);
     const updated = await applyPlus(state, kind, amount);
-    const correctionUntil = Math.floor(Date.now() / 1000) + CORRECTION_WINDOW_SEC;
     return json({
       progress: updated.progress,
       days: updated.days,
-      event: { id: requestId, kind, amount, correctionUntil },
+      event: { id: requestId, kind, amount },
     });
   }
 
   return json({ error: "Azione non supportata" }, 400);
-}
-
-export async function PATCH(request: NextRequest) {
-  if (!requireActionHeader(request)) {
-    return json({ error: "Richiesta non valida" }, 400);
-  }
-  const body = await parseBody(request);
-  if (body?.action !== "timer:correct") {
-    return json({ error: "Azione non supportata" }, 400);
-  }
-  const sessionId = String(body.sessionId ?? "");
-  const secret = String(body.secret ?? "");
-  const minutes = Number(body.minutes ?? 0);
-  const session = await getTimer(sessionId);
-  if (!session?.completed || !session.countedMinutes) {
-    return json({ error: "Sessione non correggibile" }, 404);
-  }
-  if ((session.correctionUntil ?? 0) < Math.floor(Date.now() / 1000)) {
-    return json({ error: "Finestra di correzione scaduta" }, 403);
-  }
-  const secretHash = await sha256Hex(secret);
-  if (secretHash !== session.secretHash) {
-    return json({ error: "Segreto non valido" }, 403);
-  }
-  if (!Number.isInteger(minutes) || minutes < 0 || minutes > session.countedMinutes) {
-    return json({ error: "Minuti non validi" }, 400);
-  }
-  const delta = minutes - session.countedMinutes;
-  const deltaSessions = minutes === 0 ? -1 : 0;
-  session.countedMinutes = minutes;
-  if (minutes === 0) session.correctionUntil = Math.floor(Date.now() / 1000);
-  await saveTimer(session);
-  const state = await readState();
-  const updated = await correctMinutes(state, delta, deltaSessions);
-  return json({ progress: updated.progress, days: updated.days });
-}
-
-export async function DELETE(request: NextRequest) {
-  if (!requireActionHeader(request)) {
-    return json({ error: "Richiesta non valida" }, 400);
-  }
-  const body = await parseBody(request);
-  if (body?.action !== "plus:undo") {
-    return json({ error: "Azione non supportata" }, 400);
-  }
-  const eventId = String(body.eventId ?? "");
-  const kind = body.kind === "super" ? "super" : body.kind === "shakubuku" ? "shakubuku" : null;
-  const secret = String(body.secret ?? "");
-  if (!kind || !/^[0-9a-f-]{36}$/i.test(eventId)) {
-    return json({ error: "Evento non valido" }, 400);
-  }
-  const event = await getPlus(eventId);
-  if (!event) return json({ error: "Evento non trovato" }, 404);
-  const secretHash = await sha256Hex(secret);
-  if (secretHash !== event.secretHash) {
-    return json({ error: "Segreto non valido" }, 403);
-  }
-  const state = await readState();
-  const updated = await undoPlus(state, kind, event.amount, event.day);
-  return json({ progress: updated.progress, days: updated.days });
 }

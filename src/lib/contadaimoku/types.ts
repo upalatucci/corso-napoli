@@ -28,7 +28,6 @@ export type TimerSession = {
   endsAt: number;
   completed?: boolean;
   countedMinutes?: number;
-  correctionUntil?: number;
 };
 
 export type PlusEvent = {
