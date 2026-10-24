@@ -1,6 +1,70 @@
 import type { DayEntry, Progress } from "./types";
 
 const STORAGE_PROGRESS = "contadaimoku-napoli-progress-v1";
+const STORAGE_TIMER = "contadaimoku-napoli-timer-v1";
+
+export type CachedTimerState = {
+  id: string;
+  secret: string;
+  minutes: number;
+  startedAt: number;
+  completesAt: number;
+  confirmed: boolean;
+  pausedAt?: number;
+  pausedRemainingMs?: number;
+};
+
+function isCachedTimerState(value: unknown): value is CachedTimerState {
+  if (!value || typeof value !== "object") return false;
+  const t = value as CachedTimerState;
+  return (
+    typeof t.id === "string" &&
+    /^[0-9a-f-]{36}$/i.test(t.id) &&
+    typeof t.secret === "string" &&
+    t.secret.length >= 16 &&
+    Number.isFinite(t.minutes) &&
+    t.minutes >= 1 &&
+    t.minutes <= 720 &&
+    Number.isFinite(t.startedAt) &&
+    Number.isFinite(t.completesAt) &&
+    t.confirmed === true &&
+    (t.pausedAt === undefined || Number.isFinite(t.pausedAt)) &&
+    (t.pausedRemainingMs === undefined || Number.isFinite(t.pausedRemainingMs))
+  );
+}
+
+export function timerRemainingMs(timer: CachedTimerState, at = Date.now()) {
+  if (timer.pausedAt !== undefined) return Math.max(0, timer.pausedRemainingMs ?? 0);
+  return Math.max(0, timer.completesAt - at);
+}
+
+export function loadCachedTimer(): CachedTimerState | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_TIMER);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isCachedTimerState(parsed)) {
+      localStorage.removeItem(STORAGE_TIMER);
+      return null;
+    }
+    return parsed;
+  } catch {
+    localStorage.removeItem(STORAGE_TIMER);
+    return null;
+  }
+}
+
+export function saveCachedTimer(timer: CachedTimerState | null) {
+  if (!timer?.confirmed) {
+    localStorage.removeItem(STORAGE_TIMER);
+    return;
+  }
+  localStorage.setItem(STORAGE_TIMER, JSON.stringify(timer));
+}
+
+export function clearCachedTimer() {
+  localStorage.removeItem(STORAGE_TIMER);
+}
 
 export type ProgressSnapshot = {
   progress: Progress;

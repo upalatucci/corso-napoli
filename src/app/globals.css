@@ -569,6 +569,35 @@ body {
   color: var(--wave-navy);
 }
 
+.wave-stat--syncing {
+  opacity: 0.72;
+}
+
+.wave-timer-preparing {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--wave-navy);
+}
+
+.wave-spinner {
+  width: 1rem;
+  height: 1rem;
+  border: 2.5px solid color-mix(in srgb, var(--wave-ink) 25%, transparent);
+  border-top-color: var(--wave-ink);
+  border-radius: 50%;
+  animation: wave-spin 0.75s linear infinite;
+}
+
+@keyframes wave-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .wave-contact {
   display: inline-block;
   margin-top: 0.65rem;

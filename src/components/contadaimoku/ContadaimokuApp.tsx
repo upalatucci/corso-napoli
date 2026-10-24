@@ -2,13 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  type CachedTimerState,
+  clearCachedTimer,
   fetchProgress,
   loadCachedProgress,
+  loadCachedTimer,
   progressHeaders,
   randomSecret,
   requestProof,
   saveCachedProgress,
+  saveCachedTimer,
   sha256Hex,
+  timerRemainingMs,
 } from "@/lib/contadaimoku/client";
 import { formatCount, formatDaimoku, formatTimer } from "@/lib/contadaimoku/format";
 import type { DayEntry, Progress } from "@/lib/contadaimoku/types";
@@ -19,16 +24,7 @@ import { TotemHero } from "@/components/totem/TotemHero";
 
 const QUICK_MINUTES = [5, 10, 15, 30, 60];
 
-type TimerState = {
-  id: string;
-  secret: string;
-  minutes: number;
-  startedAt: number;
-  completesAt: number;
-  confirmed: boolean;
-  pausedAt?: number;
-  pausedRemainingMs?: number;
-};
+type TimerState = CachedTimerState;
 
 const emptyProgress: Progress = { minutes: 0, shakubuku: 0, super: 0, updatedAt: 0 };
 
@@ -52,10 +48,21 @@ export function ContadaimokuApp() {
   useEffect(() => {
     const cached = loadCachedProgress();
     if (cached) setProgress(cached.progress);
+    const cachedTimer = loadCachedTimer();
+    if (cachedTimer) {
+      setTimer(cachedTimer);
+      if (timerRemainingMs(cachedTimer) > 0) {
+        setStatus("Sessione ripristinata.");
+      }
+    }
     fetchProgress()
       .then(({ progress: p, days: d }) => applySnapshot(p, d))
       .catch(() => setStatus("Impossibile aggiornare i dati. Riprova più tardi."));
   }, [applySnapshot]);
+
+  useEffect(() => {
+    saveCachedTimer(timer);
+  }, [timer]);
 
   useEffect(() => {
     const refresh = () => {
@@ -73,9 +80,12 @@ export function ContadaimokuApp() {
     return () => window.clearInterval(id);
   }, []);
 
+  const timerStarting = Boolean(timer && !timer.confirmed);
+
   const remainingMs = useMemo(() => {
-    if (!timer?.confirmed) return 0;
+    if (!timer) return 0;
     if (timer.pausedAt !== undefined) return timer.pausedRemainingMs ?? 0;
+    if (!now) return timer.minutes * 60_000;
     return Math.max(0, timer.completesAt - now);
   }, [timer, now]);
 
@@ -84,6 +94,7 @@ export function ContadaimokuApp() {
   async function cancelTimer() {
     if (!timer?.confirmed) {
       setTimer(null);
+      clearCachedTimer();
       return;
     }
     setBusy(true);
@@ -98,6 +109,7 @@ export function ContadaimokuApp() {
         }),
       });
       setTimer(null);
+      clearCachedTimer();
       setStatus("Timer annullato. Nessun contributo è stato salvato.");
     } catch {
       setStatus("Annullamento non riuscito.");
@@ -144,9 +156,10 @@ export function ContadaimokuApp() {
         startedAt: json.timer.startedAt * 1000,
         completesAt: json.timer.endsAt * 1000,
       });
-      setStatus("Timer avviato. Blocca pure lo schermo.");
+      setStatus("Sessione attiva. Puoi bloccare lo schermo.");
     } catch (error) {
       setTimer(null);
+      clearCachedTimer();
       setStatus(error instanceof Error ? error.message : "Avvio non confermato");
     } finally {
       setBusy(false);
@@ -176,9 +189,18 @@ export function ContadaimokuApp() {
         }),
       });
       const json = await response.json();
+      if (response.status === 409) {
+        clearCachedTimer();
+        setTimer(null);
+        const refreshed = await fetchProgress().catch(() => null);
+        if (refreshed) applySnapshot(refreshed.progress, refreshed.days);
+        setStatus("Sessione già registrata.");
+        return;
+      }
       if (!response.ok || !json.progress) throw new Error(json.error ?? "Completamento non registrato");
       applySnapshot(json.progress, json.days);
       setTimer(null);
+      clearCachedTimer();
       setStatus(
         `${formatCount(json.timer.countedMinutes)} minuti completati · ${formatDaimoku(json.timer.countedMinutes)} aggiunti al totale.`,
       );
@@ -322,8 +344,14 @@ export function ContadaimokuApp() {
                 {formatCount(minutesChoice)} minuti · <strong>≈ {formatDaimoku(minutesChoice)}</strong>
               </p>
               <div className="mt-6 flex flex-col gap-3">
-                <button type="button" disabled={busy} onClick={() => void startTimer()} className="wave-btn wave-btn--primary">
-                  Avvia il timer
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void startTimer()}
+                  className="wave-btn wave-btn--primary"
+                  aria-busy={busy}
+                >
+                  {busy ? "Avvio in corso…" : "Avvia il timer"}
                 </button>
                 <button type="button" disabled={busy} onClick={openManualModal} className="wave-btn wave-btn--secondary">
                   Registra minuti già svolti
@@ -333,46 +361,63 @@ export function ContadaimokuApp() {
           ) : (
             <div className="text-center">
               <p className="wave-eyebrow">Timer Daimoku</p>
-              <p className="wave-stat mt-2">{formatTimer(remainingMs)}</p>
+              <p className={`wave-stat mt-2${timerStarting ? " wave-stat--syncing" : ""}`} aria-live="polite">
+                {formatTimer(remainingMs)}
+              </p>
+              {timerStarting && (
+                <p className="wave-timer-preparing mt-2" role="status">
+                  <span className="wave-spinner" aria-hidden />
+                  Sincronizzazione con il server…
+                </p>
+              )}
               <p className="mt-2 text-sm wave-muted">
                 {timer.minutes} minuti · {formatDaimoku(timer.minutes)}
               </p>
               <div className="mt-6 flex flex-wrap justify-center gap-2">
-                {remainingMs > 0 && (
-                  <button
-                    type="button"
-                    className="wave-btn wave-btn--secondary"
-                    onClick={() => {
-                      if (timer.pausedAt) {
-                        const resumeAt = Date.now();
-                        setTimer({
-                          ...timer,
-                          pausedAt: undefined,
-                          pausedRemainingMs: undefined,
-                          completesAt: resumeAt + (timer.pausedRemainingMs ?? 0),
-                        });
-                      } else {
-                        setTimer({
-                          ...timer,
-                          pausedAt: Date.now(),
-                          pausedRemainingMs: remainingMs,
-                        });
-                      }
-                    }}
-                  >
-                    {timer.pausedAt ? "Riprendi" : "Pausa"}
-                  </button>
+                {timer.confirmed && remainingMs > 0 && (
+                  <>
+                    <button
+                      type="button"
+                      className="wave-btn wave-btn--secondary"
+                      onClick={() => {
+                        if (timer.pausedAt) {
+                          const resumeAt = Date.now();
+                          setTimer({
+                            ...timer,
+                            pausedAt: undefined,
+                            pausedRemainingMs: undefined,
+                            completesAt: resumeAt + (timer.pausedRemainingMs ?? 0),
+                          });
+                        } else {
+                          setTimer({
+                            ...timer,
+                            pausedAt: Date.now(),
+                            pausedRemainingMs: remainingMs,
+                          });
+                        }
+                      }}
+                    >
+                      {timer.pausedAt ? "Riprendi" : "Pausa"}
+                    </button>
+                    {remainingMs < 60_000 && (
+                      <button
+                        type="button"
+                        className="wave-btn wave-btn--primary"
+                        disabled={busy}
+                        onClick={() => void completeTimer(true)}
+                      >
+                        Termina
+                      </button>
+                    )}
+                  </>
                 )}
                 <button
                   type="button"
-                  className="wave-btn wave-btn--primary"
-                  disabled={busy}
-                  onClick={() => void completeTimer(remainingMs > 0 && remainingMs < 60_000)}
+                  className="wave-btn wave-btn--ghost"
+                  disabled={busy && timer.confirmed}
+                  onClick={() => void cancelTimer()}
                 >
-                  {remainingMs < 60_000 && remainingMs > 0 ? "Termina" : "Registra sessione"}
-                </button>
-                <button type="button" className="wave-btn wave-btn--ghost" disabled={busy} onClick={() => void cancelTimer()}>
-                  Annulla
+                  {timerStarting ? "Interrompi" : "Annulla"}
                 </button>
               </div>
             </div>
