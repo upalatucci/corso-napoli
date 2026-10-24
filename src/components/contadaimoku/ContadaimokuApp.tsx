@@ -252,7 +252,6 @@ export function ContadaimokuApp() {
         <article className="wave-panel text-center">
           <p className="wave-eyebrow">Totale collettivo</p>
           <p className="wave-stat">{formatDaimoku(progress.minutes)}</p>
-          <p className="mt-3 text-sm wave-muted">Solo Daimoku · anonimo · senza obiettivi da raggiungere.</p>
         </article>
 
         <article className="wave-panel wave-panel--duo">
