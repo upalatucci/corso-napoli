@@ -1,11 +1,23 @@
-import type { Metadata } from "next";
-import { Permanent_Marker, Source_Sans_3 } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Bangers, Bebas_Neue, Rock_Salt, Source_Sans_3 } from "next/font/google";
 import "./globals.css";
 
-const marker = Permanent_Marker({
+const brush = Rock_Salt({
   weight: "400",
   subsets: ["latin"],
-  variable: "--font-marker",
+  variable: "--font-brush",
+});
+
+const logo = Bangers({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-logo",
+});
+
+const caps = Bebas_Neue({
+  weight: "400",
+  subsets: ["latin"],
+  variable: "--font-caps",
 });
 
 const source = Source_Sans_3({
@@ -15,15 +27,21 @@ const source = Source_Sans_3({
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://corso-napoli.vercel.app"),
-  title: "Contadaimoku & Shakubuku · Josho Napoli",
+  title: "Contadaimoku · Josho Napoli",
   description:
-    "Percorso collettivo anonimo verso il Corso Territorio Napoli · 6-8 novembre 2026. Daimoku, Shakubuku e inviti.",
+    "Contadaimoku collettivo per il Corso Territorio Napoli · 6-8 novembre 2026 al Grand Hotel Salerno.",
   openGraph: {
     title: "Josho Napoli · Contadaimoku",
     description: "Le onde del nostro impegno comune verso il corso territorio Napoli.",
-    images: [{ url: "/wave-totem.jpg" }],
+    images: [{ url: "/hero-wave-desktop.webp", width: 2560, height: 1360, alt: "Josho Napoli" }],
   },
-  themeColor: "#2bb9e3",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#58acdb",
 };
 
 export default function RootLayout({
@@ -33,7 +51,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="it">
-      <body className={`${marker.variable} ${source.variable} antialiased`}>{children}</body>
+      <body className={`${brush.variable} ${logo.variable} ${caps.variable} ${source.variable} antialiased`}>
+        {children}
+      </body>
     </html>
   );
 }

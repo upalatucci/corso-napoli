@@ -90,7 +90,7 @@ export function randomSecret() {
 export async function fetchProgress() {
   const response = await fetch("/api/progress", { headers: { accept: "application/json" }, cache: "no-cache" });
   const json = await response.json();
-  return json as { progress: Progress; days: DayEntry[] };
+  return json as { progress: Progress; days: DayEntry[]; presence?: { active: number } };
 }
 
 export function loadCachedProgress(): ProgressSnapshot | null {

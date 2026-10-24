@@ -37,6 +37,7 @@ export type PlusEvent = {
   amount: number;
   secretHash: string;
   createdAt: number;
+  day: string;
 };
 
 export type StoredState = {

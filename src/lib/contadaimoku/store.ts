@@ -112,7 +112,12 @@ export async function correctMinutes(state: StoredState, deltaMinutes: number, d
   return writeState(next);
 }
 
-export async function undoPlus(state: StoredState, kind: "shakubuku" | "super", amount: number, day: string) {
+export async function undoPlus(
+  state: StoredState,
+  kind: "shakubuku" | "super",
+  amount: number,
+  day: string,
+) {
   const current = state.days.find((d) => d.day === day) ?? emptyDay(day);
   const next: StoredState = {
     progress: {

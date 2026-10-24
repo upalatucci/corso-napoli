@@ -14,6 +14,7 @@ import {
   undoPlus,
 } from "@/lib/contadaimoku/store";
 import { dayKeyRome } from "@/lib/contadaimoku/metrics";
+import { activeTimerCount, clearTimerActive, markTimerActive } from "@/lib/contadaimoku/presence";
 import type { PlusEvent, TimerSession } from "@/lib/contadaimoku/types";
 
 const CORRECTION_WINDOW_SEC = 48 * 60 * 60;
@@ -28,7 +29,8 @@ function requireActionHeader(request: NextRequest) {
 
 export async function GET() {
   const state = await readState();
-  return json({ progress: state.progress, days: state.days });
+  const active = await activeTimerCount();
+  return json({ progress: state.progress, days: state.days, presence: { active } });
 }
 
 async function parseBody(request: NextRequest) {
@@ -88,9 +90,11 @@ export async function POST(request: NextRequest) {
       endsAt,
     };
     await saveTimer(session);
+    await markTimerActive(sessionId);
+    const active = await activeTimerCount();
     return json({
       timer: { startedAt, endsAt },
-      presence: { active: 1 },
+      presence: { active },
     });
   }
 
@@ -138,6 +142,7 @@ export async function POST(request: NextRequest) {
     const countedMinutes = body.countedMinutes !== undefined ? Number(body.countedMinutes) : undefined;
     const session = await getTimer(sessionId);
     if (!session) return json({ error: "Sessione non trovata" }, 404);
+    if (session.completed) return json({ error: "Sessione già registrata" }, 409);
     const secretHash = await sha256Hex(secret);
     if (secretHash !== session.secretHash) {
       return json({ error: "Segreto non valido" }, 403);
@@ -151,6 +156,7 @@ export async function POST(request: NextRequest) {
     session.countedMinutes = minutes;
     session.correctionUntil = correctionUntil;
     await saveTimer(session);
+    await clearTimerActive(sessionId);
     const updated = await applyMinutes(state, minutes);
     return json({
       progress: updated.progress,
@@ -168,6 +174,7 @@ export async function POST(request: NextRequest) {
     if (secretHash !== session.secretHash) {
       return json({ error: "Segreto non valido" }, 403);
     }
+    await clearTimerActive(sessionId);
     return json({ cancelled: sessionId });
   }
 
@@ -186,12 +193,16 @@ export async function POST(request: NextRequest) {
     if (!verifyProof(proofToken, proofSolution)) {
       return json({ error: "Verifica anonima non valida" }, 403);
     }
+    const existing = await getPlus(requestId);
+    if (existing) return json({ error: "Contributo già registrato" }, 409);
+    const eventDay = dayKeyRome();
     const event: PlusEvent = {
       id: requestId,
       kind,
       amount,
       secretHash: verifierHash,
       createdAt: Date.now(),
+      day: eventDay,
     };
     await savePlus(event);
     const updated = await applyPlus(state, kind, amount);
@@ -262,6 +273,6 @@ export async function DELETE(request: NextRequest) {
     return json({ error: "Segreto non valido" }, 403);
   }
   const state = await readState();
-  const updated = await undoPlus(state, kind, event.amount, dayKeyRome());
+  const updated = await undoPlus(state, kind, event.amount, event.day);
   return json({ progress: updated.progress, days: updated.days });
 }
